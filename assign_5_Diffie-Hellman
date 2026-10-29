@@ -1,0 +1,86 @@
+
+#include <iostream>
+using namespace std;
+
+// Calculate (base^exp) % mod
+long long modPow(long long base, long long exp,
+                 long long mod) {
+    long long result = 1;
+    base = base % mod;
+
+    while (exp > 0) {
+        if (exp % 2 == 1)
+            result = (result * base) % mod;
+
+        base = (base * base) % mod;
+        exp = exp / 2;
+    }
+
+    return result;
+}
+
+int main() {
+    long long p = 23;
+    long long g = 5;
+
+    // Alice and Bob's private keys
+    long long a = 6;
+    long long b = 15;
+
+    // Eve's private keys for two separate exchanges
+    long long eA = 7;
+    long long eB = 10;
+
+    cout << "DIFFIE-HELLMAN KEY EXCHANGE\n";
+    cout << "Prime p = " << p << ", Generator g = "
+         << g << "\n\n";
+
+    long long A = modPow(g, a, p);
+    long long B = modPow(g, b, p);
+
+    cout << "Alice public value: " << A << endl;
+    cout << "Bob public value: " << B << endl;
+
+    long long aliceKey = modPow(B, a, p);
+    long long bobKey = modPow(A, b, p);
+
+    cout << "Alice shared secret: " << aliceKey << endl;
+    cout << "Bob shared secret: " << bobKey << endl;
+
+    if (aliceKey == bobKey)
+        cout << "Normal DH: Shared secrets match.\n";
+
+    cout << "\nMITM ATTACK\n";
+
+    // Eve creates two public values
+    long long EveToBob = modPow(g, eA, p);
+    long long EveToAlice = modPow(g, eB, p);
+
+    cout << "Eve sends to Bob: " << EveToBob << endl;
+    cout << "Eve sends to Alice: " << EveToAlice << endl;
+
+    // Alice unknowingly establishes a key with Eve
+    long long aliceEveKey = modPow(EveToAlice, a, p);
+
+    // Bob unknowingly establishes a key with Eve
+    long long bobEveKey = modPow(EveToBob, b, p);
+
+    // Eve computes both keys independently
+    long long eveAliceKey = modPow(A, eB, p);
+    long long eveBobKey = modPow(B, eA, p);
+
+    cout << "\nAlice-Eve key: " << aliceEveKey << endl;
+    cout << "Eve's Alice-side key: " << eveAliceKey << endl;
+
+    cout << "Bob-Eve key: " << bobEveKey << endl;
+    cout << "Eve's Bob-side key: " << eveBobKey << endl;
+
+    if (aliceEveKey == eveAliceKey &&
+        bobEveKey == eveBobKey) {
+        cout << "\nMITM successful: Eve knows both keys.\n";
+    }
+
+    cout << "\nWARNING: Small values are for education only.\n";
+
+    return 0;
+}
