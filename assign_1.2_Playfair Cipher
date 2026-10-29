@@ -1,0 +1,104 @@
+
+#include <iostream>
+#include <string>
+using namespace std;
+
+char mat[5][5];
+
+void makeMatrix(string key) {
+    bool used[26] = {false};
+    used['J' - 'A'] = true;
+    string s = "";
+
+    for (int i = 0; i < key.length(); i++) {
+        char ch = toupper(key[i]);
+        if (ch == 'J') ch = 'I';
+
+        if (ch >= 'A' && ch <= 'Z' && !used[ch - 'A']) {
+            used[ch - 'A'] = true;
+            s += ch;
+        }
+    }
+
+    for (char ch = 'A'; ch <= 'Z'; ch++) {
+        if (!used[ch - 'A']) {
+            used[ch - 'A'] = true;
+            s += ch;
+        }
+    }
+
+    for (int i = 0; i < 25; i++)
+        mat[i / 5][i % 5] = s[i];
+}
+
+void findPos(char ch, int &r, int &c) {
+    if (ch == 'J') ch = 'I';
+
+    for (int i = 0; i < 5; i++)
+        for (int j = 0; j < 5; j++)
+            if (mat[i][j] == ch) {
+                r = i;
+                c = j;
+                return;
+            }
+}
+
+int main() {
+    string text, key, s = "";
+    int choice;
+
+    cout << "1. Encrypt\n2. Decrypt\n";
+    cin >> choice;
+
+    cout << "Enter text (no spaces): ";
+    cin >> text;
+
+    cout << "Enter key: ";
+    cin >> key;
+
+    makeMatrix(key);
+
+    for (int i = 0; i < text.length(); i++) {
+        char ch = toupper(text[i]);
+        if (ch == 'J') ch = 'I';
+        if (ch >= 'A' && ch <= 'Z') s += ch;
+    }
+
+    if (choice == 1) {
+        string temp = "";
+
+        for (int i = 0; i < s.length(); i++) {
+            temp += s[i];
+
+            if (i + 1 < s.length() && s[i] == s[i + 1])
+                temp += 'X';
+        }
+
+        s = temp;
+        if (s.length() % 2 != 0) s += 'X';
+    }
+
+    for (int i = 0; i < s.length(); i += 2) {
+        int r1, c1, r2, c2;
+        findPos(s[i], r1, c1);
+        findPos(s[i + 1], r2, c2);
+
+        if (r1 == r2) {
+            int shift = (choice == 1) ? 1 : 4;
+            s[i] = mat[r1][(c1 + shift) % 5];
+            s[i + 1] = mat[r2][(c2 + shift) % 5];
+        }
+        else if (c1 == c2) {
+            int shift = (choice == 1) ? 1 : 4;
+            s[i] = mat[(r1 + shift) % 5][c1];
+            s[i + 1] = mat[(r2 + shift) % 5][c2];
+        }
+        else {
+            s[i] = mat[r1][c2];
+            s[i + 1] = mat[r2][c1];
+        }
+    }
+
+    cout << "Result: " << s << endl;
+    return 0;
+}
