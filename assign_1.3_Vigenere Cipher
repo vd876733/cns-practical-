@@ -1,0 +1,42 @@
+
+#include <iostream>
+using namespace std;
+
+int main() {
+    string text, key;
+    int choice;
+
+    cout << "1. Encrypt\n2. Decrypt\n";
+    cin >> choice;
+
+    cout << "Enter text (no spaces): ";
+    cin >> text;
+
+    cout << "Enter key (no spaces): ";
+    cin >> key;
+
+    if (key.length() == 0) {
+        cout << "Invalid key";
+        return 0;
+    }
+
+    int j = 0;
+
+    for (int i = 0; i < text.length(); i++) {
+        char ch = toupper(text[i]);
+
+        if (ch >= 'A' && ch <= 'Z') {
+            int shift = toupper(key[j % key.length()]) - 'A';
+
+            if (choice == 1)
+                text[i] = (ch - 'A' + shift) % 26 + 'A';
+            else
+                text[i] = (ch - 'A' - shift + 26) % 26 + 'A';
+
+            j++;
+        }
+    }
+
+    cout << "Result: " << text << endl;
+    return 0;
+}
