@@ -1,214 +1,53 @@
 
-#include <iostream>
-#include <vector>
-#include <string>
-#include <chrono>
-#include <iomanip>
-#include <openssl/evp.h>
-#include <openssl/rsa.h>
-#include <openssl/err.h>
+import time
+import secrets
+from cryptography.hazmat.primitives.asymmetric import rsa, padding
+from cryptography.hazmat.primitives import hashes
 
-using namespace std;
-using namespace chrono;
 
-EVP_PKEY* generateKey(int bits) {
-    EVP_PKEY_CTX* ctx = EVP_PKEY_CTX_new_id(EVP_PKEY_RSA, nullptr);
-    EVP_PKEY* key = nullptr;
+for size in [1024, 2048, 3072]:
 
-    if (!ctx ||
-        EVP_PKEY_keygen_init(ctx) <= 0 ||
-        EVP_PKEY_CTX_set_rsa_keygen_bits(ctx, bits) <= 0 ||
-        EVP_PKEY_keygen(ctx, &key) <= 0) {
-        if (ctx) EVP_PKEY_CTX_free(ctx);
-        return nullptr;
-    }
+    # Key generation time
+    start = time.perf_counter()
+    private = rsa.generate_private_key(
+        public_exponent=65537, key_size=size
+    )
+    public = private.public_key()
+    key_time = time.perf_counter() - start
 
-    EVP_PKEY_CTX_free(ctx);
-    return key;
-}
+    print("\nRSA Key Size:", size, "bits")
+    print("Key Generation:", round(key_time, 6), "seconds")
 
-bool encryptMessage(EVP_PKEY* key,
-                    const vector<unsigned char>& message,
-                    vector<unsigned char>& encrypted) {
-    EVP_PKEY_CTX* ctx = EVP_PKEY_CTX_new(key, nullptr);
-    if (!ctx) return false;
+    for n in [64, 128, 256]:
+        message = secrets.token_bytes(n // 8)
 
-    size_t len = 0;
+        # Encryption time
+        start = time.perf_counter()
+        for _ in range(5):
+            cipher = public.encrypt(
+                message,
+                padding.OAEP(
+                    mgf=padding.MGF1(hashes.SHA256()),
+                    algorithm=hashes.SHA256(),
+                    label=None
+                )
+            )
+        enc_time = (time.perf_counter() - start) / 5
 
-    bool ok =
-        EVP_PKEY_encrypt_init(ctx) > 0 &&
-        EVP_PKEY_CTX_set_rsa_padding(
-            ctx, RSA_PKCS1_OAEP_PADDING) > 0 &&
-        EVP_PKEY_CTX_set_rsa_oaep_md(
-            ctx, EVP_sha256()) > 0 &&
-        EVP_PKEY_encrypt(ctx, nullptr, &len,
-                         message.data(), message.size()) > 0;
+        # Decryption time
+        start = time.perf_counter()
+        for _ in range(5):
+            plain = private.decrypt(
+                cipher,
+                padding.OAEP(
+                    mgf=padding.MGF1(hashes.SHA256()),
+                    algorithm=hashes.SHA256(),
+                    label=None
+                )
+            )
+        dec_time = (time.perf_counter() - start) / 5
 
-    if (ok) {
-        encrypted.resize(len);
-        ok = EVP_PKEY_encrypt(ctx, encrypted.data(), &len,
-                              message.data(), message.size()) > 0;
-        encrypted.resize(ok ? len : 0);
-    }
-
-    EVP_PKEY_CTX_free(ctx);
-    return ok;
-}
-
-bool decryptMessage(EVP_PKEY* key,
-                    const vector<unsigned char>& encrypted,
-                    vector<unsigned char>& decrypted) {
-    EVP_PKEY_CTX* ctx = EVP_PKEY_CTX_new(key, nullptr);
-    if (!ctx) return false;
-
-    size_t len = 0;
-
-    bool ok =
-        EVP_PKEY_decrypt_init(ctx) > 0 &&
-        EVP_PKEY_CTX_set_rsa_padding(
-            ctx, RSA_PKCS1_OAEP_PADDING) > 0 &&
-        EVP_PKEY_CTX_set_rsa_oaep_md(
-            ctx, EVP_sha256()) > 0 &&
-        EVP_PKEY_decrypt(ctx, nullptr, &len,
-                         encrypted.data(), encrypted.size()) > 0;
-
-    if (ok) {
-        decrypted.resize(len);
-        ok = EVP_PKEY_decrypt(ctx, decrypted.data(), &len,
-                              encrypted.data(), encrypted.size()) > 0;
-        decrypted.resize(ok ? len : 0);
-    }
-
-    EVP_PKEY_CTX_free(ctx);
-    return ok;
-}
-
-double measureKeyGeneration(int bits, int trials) {
-    double total = 0;
-
-    for (int i = 0; i < trials; i++) {
-        auto start = steady_clock::now();
-        EVP_PKEY* key = generateKey(bits);
-        auto end = steady_clock::now();
-
-        if (!key) {
-            ERR_print_errors_fp(stderr);
-            return -1;
-        }
-
-        total += duration<double, milli>(end - start).count();
-        EVP_PKEY_free(key);
-    }
-
-    return total / trials;
-}
-
-int main() {
-    int keySizes[] = {1024, 2048, 3072};
-    int messageBits[] = {64, 128, 256, 384};
-    const int trials = 3;
-    const int repetitions = 1000;
-
-    cout << fixed << setprecision(4);
-
-    cout << "RSA Performance Benchmark\n";
-    cout << "OAEP padding with SHA-256\n";
-    cout << "Key generation averaged over " << trials
-         << " trials\n\n";
-
-    for (int bits : keySizes) {
-        cout << "\nRSA Key Size: " << bits << " bits\n";
-
-        double keyTime = measureKeyGeneration(bits, trials);
-
-        if (keyTime < 0) {
-            cout << "Key generation failed.\n";
-            return 1;
-        }
-
-        cout << "Average key generation time: "
-             << keyTime << " ms\n";
-
-        EVP_PKEY* key = generateKey(bits);
-        if (!key) {
-            ERR_print_errors_fp(stderr);
-            return 1;
-        }
-
-        cout << "\nMessage(bits)  Encrypt(ms)  Decrypt(ms)\n";
-
-        for (int n : messageBits) {
-            int bytes = n / 8;
-
-            // OAEP-SHA256 maximum = modulus bytes - 66
-            int maxBytes = bits / 8 - 66;
-
-            if (bytes > maxBytes) {
-                cout << setw(7) << n
-                     << "          Message too large\n";
-                continue;
-            }
-
-            vector<unsigned char> message(bytes);
-            vector<unsigned char> encrypted, decrypted;
-
-            // Fixed test data; use real random data for security.
-            for (int i = 0; i < bytes; i++)
-                message[i] = (i * 17 + 23) % 256;
-
-            if (!encryptMessage(key, message, encrypted)) {
-                cout << "Encryption failed.\n";
-                ERR_print_errors_fp(stderr);
-                EVP_PKEY_free(key);
-                return 1;
-            }
-
-            // Warm-up and verify round-trip correctness.
-            if (!decryptMessage(key, encrypted, decrypted) ||
-                decrypted != message) {
-                cout << "Decryption verification failed.\n";
-                EVP_PKEY_free(key);
-                return 1;
-            }
-
-            double encTotal = 0, decTotal = 0;
-
-            for (int i = 0; i < repetitions; i++) {
-                auto start = steady_clock::now();
-                bool ok = encryptMessage(key, message, encrypted);
-                auto end = steady_clock::now();
-
-                if (!ok) {
-                    cout << "Encryption failed.\n";
-                    EVP_PKEY_free(key);
-                    return 1;
-                }
-
-                encTotal += duration<double, milli>(
-                    end - start).count();
-
-                start = steady_clock::now();
-                ok = decryptMessage(key, encrypted, decrypted);
-                end = steady_clock::now();
-
-                if (!ok || decrypted != message) {
-                    cout << "Decryption failed.\n";
-                    EVP_PKEY_free(key);
-                    return 1;
-                }
-
-                decTotal += duration<double, milli>(
-                    end - start).count();
-            }
-
-            cout << setw(7) << n
-                 << setw(14) << encTotal / repetitions
-                 << setw(14) << decTotal / repetitions
-                 << '\n';
-        }
-
-        EVP_PKEY_free(key);
-    }
-
-    return 0;
-}
+        print("\nMessage Size:", n, "bits")
+        print("Encryption:", round(enc_time, 6), "seconds")
+        print("Decryption:", round(dec_time, 6), "seconds")
+        print("Correct:", plain == message)
