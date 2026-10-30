@@ -1,258 +1,35 @@
 
-#include <iostream>
-#include <fstream>
-#include <vector>
-#include <string>
-#include <iterator>
-#include <openssl/evp.h>
-#include <openssl/rsa.h>
-#include <openssl/pem.h>
-#include <openssl/rand.h>
+from cryptography.fernet import Fernet
 
-using namespace std;
+# Generate secret key
+key = Fernet.generate_key()
+cipher = Fernet(key)
 
-vector<unsigned char> readFile(const string& filename) {
-    ifstream file(filename, ios::binary);
-    if (!file) return {};
-    return vector<unsigned char>(
-        istreambuf_iterator<char>(file), {}
-    );
-}
+print("Secret Key:", key.decode())
 
-bool writeFile(const string& filename,
-               const vector<unsigned char>& data) {
-    ofstream file(filename, ios::binary);
-    if (!file) return false;
+# Read image
+with open("image.jpg", "rb") as file:
+    image = file.read()
 
-    file.write(reinterpret_cast<const char*>(data.data()),
-               data.size());
-    return file.good();
-}
+# Encrypt image
+encrypted = cipher.encrypt(image)
 
-EVP_PKEY* generateRSAKey() {
-    EVP_PKEY_CTX* ctx =
-        EVP_PKEY_CTX_new_id(EVP_PKEY_RSA, nullptr);
+with open("encrypted_image.txt", "wb") as file:
+    file.write(encrypted)
 
-    EVP_PKEY* key = nullptr;
+print("Image encrypted successfully.")
 
-    if (ctx &&
-        EVP_PKEY_keygen_init(ctx) > 0 &&
-        EVP_PKEY_CTX_set_rsa_keygen_bits(ctx, 2048) > 0 &&
-        EVP_PKEY_keygen(ctx, &key) > 0) {
-        EVP_PKEY_CTX_free(ctx);
-        return key;
-    }
+# Decrypt image
+with open("encrypted_image.txt", "rb") as file:
+    encrypted_data = file.read()
 
-    EVP_PKEY_CTX_free(ctx);
-    return nullptr;
-}
+try:
+    decrypted = cipher.decrypt(encrypted_data)
 
-bool encryptImage(
-    const vector<unsigned char>& image,
-    vector<unsigned char>& ciphertext,
-    vector<unsigned char>& key,
-    vector<unsigned char>& nonce,
-    vector<unsigned char>& tag) {
+    with open("decrypted_image.jpg", "wb") as file:
+        file.write(decrypted)
 
-    key.resize(32);
-    nonce.resize(12);
-    tag.resize(16);
-    ciphertext.resize(image.size() + 16);
+    print("Image decrypted successfully.")
 
-    if (RAND_bytes(key.data(), key.size()) != 1 ||
-        RAND_bytes(nonce.data(), nonce.size()) != 1)
-        return false;
-
-    EVP_CIPHER_CTX* ctx = EVP_CIPHER_CTX_new();
-    int len = 0, total = 0;
-
-    bool ok =
-        EVP_EncryptInit_ex(ctx, EVP_aes_256_gcm(),
-                           nullptr, nullptr, nullptr) == 1 &&
-        EVP_CIPHER_CTX_ctrl(ctx, EVP_CTRL_GCM_SET_IVLEN,
-                            nonce.size(), nullptr) == 1 &&
-        EVP_EncryptInit_ex(ctx, nullptr, nullptr,
-                           key.data(), nonce.data()) == 1 &&
-        EVP_EncryptUpdate(ctx, ciphertext.data(), &len,
-                          image.data(), image.size()) == 1;
-
-    total = len;
-
-    if (ok)
-        ok = EVP_EncryptFinal_ex(
-                 ctx, ciphertext.data() + total, &len) == 1;
-
-    total += len;
-    ciphertext.resize(total);
-
-    if (ok)
-        ok = EVP_CIPHER_CTX_ctrl(ctx, EVP_CTRL_GCM_GET_TAG,
-                                 tag.size(), tag.data()) == 1;
-
-    EVP_CIPHER_CTX_free(ctx);
-    return ok;
-}
-
-bool decryptImage(
-    const vector<unsigned char>& ciphertext,
-    const vector<unsigned char>& key,
-    const vector<unsigned char>& nonce,
-    const vector<unsigned char>& tag,
-    vector<unsigned char>& image) {
-
-    image.resize(ciphertext.size() + 16);
-    EVP_CIPHER_CTX* ctx = EVP_CIPHER_CTX_new();
-    int len = 0, total = 0;
-
-    bool ok =
-        EVP_DecryptInit_ex(ctx, EVP_aes_256_gcm(),
-                           nullptr, nullptr, nullptr) == 1 &&
-        EVP_CIPHER_CTX_ctrl(ctx, EVP_CTRL_GCM_SET_IVLEN,
-                            nonce.size(), nullptr) == 1 &&
-        EVP_DecryptInit_ex(ctx, nullptr, nullptr,
-                           key.data(), nonce.data()) == 1 &&
-        EVP_DecryptUpdate(ctx, image.data(), &len,
-                          ciphertext.data(), ciphertext.size()) == 1;
-
-    total = len;
-
-    if (ok)
-        ok = EVP_CIPHER_CTX_ctrl(ctx, EVP_CTRL_GCM_SET_TAG,
-                                 tag.size(),
-                                 const_cast<unsigned char*>(tag.data())) == 1;
-
-    if (ok)
-        ok = EVP_DecryptFinal_ex(
-                 ctx, image.data() + total, &len) == 1;
-
-    total += len;
-    image.resize(total);
-
-    EVP_CIPHER_CTX_free(ctx);
-
-    if (!ok) image.clear();
-    return ok;
-}
-
-bool signData(EVP_PKEY* key,
-              const vector<unsigned char>& data,
-              vector<unsigned char>& signature) {
-    EVP_MD_CTX* ctx = EVP_MD_CTX_new();
-    size_t len = 0;
-
-    bool ok =
-        EVP_DigestSignInit(ctx, nullptr, EVP_sha256(),
-                           nullptr, key) == 1 &&
-        EVP_DigestSignUpdate(ctx, data.data(), data.size()) == 1 &&
-        EVP_DigestSignFinal(ctx, nullptr, &len) == 1;
-
-    if (ok) {
-        signature.resize(len);
-        ok = EVP_DigestSignFinal(ctx, signature.data(), &len) == 1;
-        signature.resize(len);
-    }
-
-    EVP_MD_CTX_free(ctx);
-    return ok;
-}
-
-bool verifySignature(EVP_PKEY* key,
-                     const vector<unsigned char>& data,
-                     const vector<unsigned char>& signature) {
-    EVP_MD_CTX* ctx = EVP_MD_CTX_new();
-
-    bool ok =
-        EVP_DigestVerifyInit(ctx, nullptr, EVP_sha256(),
-                             nullptr, key) == 1 &&
-        EVP_DigestVerifyUpdate(ctx, data.data(), data.size()) == 1 &&
-        EVP_DigestVerifyFinal(ctx, signature.data(),
-                              signature.size()) == 1;
-
-    EVP_MD_CTX_free(ctx);
-    return ok;
-}
-
-int main() {
-    cout << "=== Secure Image Transmission ===\n";
-
-    string filename;
-    cout << "Enter image filename: ";
-    getline(cin, filename);
-
-    vector<unsigned char> image = readFile(filename);
-
-    if (image.empty()) {
-        cout << "Error: Cannot read image file.\n";
-        return 1;
-    }
-
-    cout << "\nSender: Image loaded (" << image.size()
-         << " bytes).\n";
-
-    // Demonstration: generate sender's signing key.
-    // In a real system, this key must be securely stored.
-    EVP_PKEY* senderKey = generateRSAKey();
-
-    if (!senderKey) {
-        cout << "RSA key generation failed.\n";
-        return 1;
-    }
-
-    vector<unsigned char> ciphertext, aesKey, nonce, tag;
-    vector<unsigned char> signature, package;
-
-    if (!encryptImage(image, ciphertext, aesKey, nonce, tag)) {
-        cout << "Encryption failed.\n";
-        EVP_PKEY_free(senderKey);
-        return 1;
-    }
-
-    // Sign ciphertext and authentication metadata.
-    package.insert(package.end(), nonce.begin(), nonce.end());
-    package.insert(package.end(), tag.begin(), tag.end());
-    package.insert(package.end(), ciphertext.begin(),
-                   ciphertext.end());
-
-    if (!signData(senderKey, package, signature)) {
-        cout << "Digital signing failed.\n";
-        EVP_PKEY_free(senderKey);
-        return 1;
-    }
-
-    cout << "Sender: Image encrypted using AES-256-GCM.\n";
-    cout << "Sender: Digital signature created.\n";
-    cout << "Network: Transmitting encrypted image...\n";
-
-    // Receiver verifies signature before decrypting.
-    cout << "\nReceiver: Verifying digital signature...\n";
-
-    if (!verifySignature(senderKey, package, signature)) {
-        cout << "Signature INVALID. Image rejected.\n";
-        EVP_PKEY_free(senderKey);
-        return 1;
-    }
-
-    cout << "Signature VALID.\n";
-
-    vector<unsigned char> recoveredImage;
-
-    if (!decryptImage(ciphertext, aesKey, nonce, tag,
-                      recoveredImage)) {
-        cout << "Authentication failed. Image rejected.\n";
-        EVP_PKEY_free(senderKey);
-        return 1;
-    }
-
-    if (!writeFile("received_image.jpg", recoveredImage)) {
-        cout << "Could not save received image.\n";
-        EVP_PKEY_free(senderKey);
-        return 1;
-    }
-
-    cout << "Image integrity verified.\n";
-    cout << "Image decrypted and saved as received_image.jpg\n";
-    cout << "Secure transmission demonstration completed.\n";
-
-    EVP_PKEY_free(senderKey);
-    return 0;
-}
+except Exception:
+    print("Decryption failed! Image was modified or key is incorrect.")
