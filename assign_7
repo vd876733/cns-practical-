@@ -1,93 +1,45 @@
 
-#include <iostream>
-#include <string>
-#include <vector>
-#include <openssl/dsa.h>
-#include <openssl/sha.h>
+from cryptography.hazmat.primitives.asymmetric import dsa
+from cryptography.hazmat.primitives import hashes
 
-using namespace std;
+# Generate DSA keys
+private_key = dsa.generate_private_key(key_size=2048)
+public_key = private_key.public_key()
 
-vector<unsigned char> getHash(const string& message) {
-    vector<unsigned char> hash(SHA256_DIGEST_LENGTH);
+# Input message
+message = input("Enter message: ").encode()
 
-    SHA256(
-        reinterpret_cast<const unsigned char*>(message.c_str()),
-        message.length(),
-        hash.data()
-    );
+# Sign message using private key
+signature = private_key.sign(
+    message,
+    hashes.SHA256()
+)
 
-    return hash;
-}
+print("\nDigital Signature:", signature.hex())
 
-int main() {
-    string message;
+# Verify signature using public key
+try:
+    public_key.verify(
+        signature,
+        message,
+        hashes.SHA256()
+    )
+    print("Signature is valid.")
+    print("Authentication and integrity verified.")
 
-    cout << "Enter tender document text: ";
-    getline(cin, message);
+except Exception:
+    print("Signature is invalid.")
 
-    // Step 1: Generate DSA parameters and keys
-    DSA* dsa = DSA_new();
+# Test whether modification is detected
+modified_message = message + b"!"
+print("\nVerifying modified message:")
 
-    if (dsa == nullptr ||
-        DSA_generate_parameters_ex(
-            dsa, 2048, nullptr, 0, nullptr, nullptr, nullptr
-        ) != 1 ||
-        DSA_generate_key(dsa) != 1) {
-        cout << "Key generation failed.\n";
-        DSA_free(dsa);
-        return 1;
-    }
-
-    cout << "\nDSA key pair generated successfully.\n";
-
-    // Step 2: Calculate the message hash
-    vector<unsigned char> hash = getHash(message);
-
-    // Step 3: Vendor signs the hash using the private key
-    vector<unsigned char> signature(DSA_size(dsa));
-    unsigned int signatureLength = 0;
-
-    if (DSA_sign(
-            0, hash.data(), hash.size(),
-            signature.data(), &signatureLength, dsa
-        ) != 1) {
-        cout << "Signing failed.\n";
-        DSA_free(dsa);
-        return 1;
-    }
-
-    signature.resize(signatureLength);
-
-    cout << "Tender digitally signed successfully.\n";
-    cout << "Signature size: " << signature.size() << " bytes\n";
-
-    // Step 4: Portal verifies the original message
-    vector<unsigned char> originalHash = getHash(message);
-
-    int result = DSA_verify(
-        0, originalHash.data(), originalHash.size(),
-        signature.data(), signature.size(), dsa
-    );
-
-    if (result == 1)
-        cout << "Original document: Signature VALID\n";
-    else
-        cout << "Original document: Signature INVALID\n";
-
-    // Step 5: Simulate document modification
-    string modifiedMessage = message + " MODIFIED";
-    vector<unsigned char> modifiedHash = getHash(modifiedMessage);
-
-    result = DSA_verify(
-        0, modifiedHash.data(), modifiedHash.size(),
-        signature.data(), signature.size(), dsa
-    );
-
-    if (result == 1)
-        cout << "Modified document: Signature VALID\n";
-    else
-        cout << "Modified document: Signature INVALID\n";
-
-    DSA_free(dsa);
-    return 0;
-}
+try:
+    public_key.verify(
+        signature,
+        modified_message,
+        hashes.SHA256()
+    )
+    print("Signature is valid.")
+except Exception:
+    print("Signature is invalid. Message was modified.")
