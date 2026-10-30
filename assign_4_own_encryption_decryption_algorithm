@@ -1,105 +1,38 @@
 
-#include <iostream>
-#include <string>
-#include <vector>
-#include <iomanip>
-using namespace std;
+# Custom Encryption and Decryption Algorithm
 
-// Custom Keyed Transformation (CKT)
+def encrypt(text, key):
+    result = ""
 
-// Encryption function
-vector<unsigned char> encryptText(
-    string plaintext, string key) {
+    for i in range(len(text)):
+        # XOR each character with a repeating key character
+        value = ord(text[i]) ^ ord(key[i % len(key)])
+        result += format(value, '02x')
 
-    vector<unsigned char> ciphertext;
+    return result
 
-    for (int i = 0; i < plaintext.length(); i++) {
-        unsigned char p = plaintext[i];
-        unsigned char k1 = key[i % key.length()];
-        unsigned char k2 = key[(i * 3 + 1) % key.length()];
 
-        // Step 1: Key-based addition
-        int value = (p + k1 + (i * 7) % 256) % 256;
+def decrypt(cipher, key):
+    result = ""
 
-        // Step 2: XOR transformation
-        value = value ^ k2;
+    # Read two hexadecimal characters at a time
+    for i in range(0, len(cipher), 2):
+        value = int(cipher[i:i + 2], 16)
+        ch = chr(value ^ ord(key[(i // 2) % len(key)]))
+        result += ch
 
-        ciphertext.push_back(value);
-    }
+    return result
 
-    return ciphertext;
-}
 
-// Decryption function
-string decryptText(
-    vector<unsigned char> ciphertext, string key) {
+# Main program
+text = input("Enter plaintext: ")
+key = input("Enter secret key: ")
 
-    string plaintext = "";
+if not key:
+    print("Key cannot be empty!")
+else:
+    cipher = encrypt(text, key)
+    print("Encrypted text:", cipher)
 
-    for (int i = 0; i < ciphertext.size(); i++) {
-        unsigned char k1 = key[i % key.length()];
-        unsigned char k2 = key[(i * 3 + 1) % key.length()];
-
-        // Step 1: Reverse XOR
-        int value = ciphertext[i] ^ k2;
-
-        // Step 2: Reverse key-based addition
-        value = (value - k1 - (i * 7) % 256 + 512) % 256;
-
-        plaintext += (char)value;
-    }
-
-    return plaintext;
-}
-
-// Display ciphertext in hexadecimal
-void displayCiphertext(
-    vector<unsigned char> ciphertext) {
-
-    for (int i = 0; i < ciphertext.size(); i++) {
-        cout << hex << uppercase
-             << setw(2) << setfill('0')
-             << (int)ciphertext[i] << " ";
-    }
-
-    cout << dec << endl;
-}
-
-int main() {
-    string plaintext, key;
-
-    cout << "CUSTOM ENCRYPTION AND DECRYPTION\n";
-
-    cout << "Enter plaintext: ";
-    getline(cin, plaintext);
-
-    cout << "Enter secret key: ";
-    getline(cin, key);
-
-    if (key.empty()) {
-        cout << "Error: Key cannot be empty.\n";
-        return 1;
-    }
-
-    // Encrypt
-    vector<unsigned char> ciphertext =
-        encryptText(plaintext, key);
-
-    cout << "\nEncrypted Ciphertext (Hex): ";
-    displayCiphertext(ciphertext);
-
-    // Decrypt
-    string recovered =
-        decryptText(ciphertext, key);
-
-    cout << "\nDecrypted Plaintext: "
-         << recovered << endl;
-
-    // Verify correctness
-    if (plaintext == recovered)
-        cout << "Verification: SUCCESS\n";
-    else
-        cout << "Verification: FAILED\n";
-
-    return 0;
-}
+    original = decrypt(cipher, key)
+    print("Decrypted text:", original)
