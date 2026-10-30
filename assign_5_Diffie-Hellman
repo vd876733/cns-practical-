@@ -1,86 +1,68 @@
 
-#include <iostream>
-using namespace std;
+# Diffie-Hellman Key Exchange with MITM Attack
 
-// Calculate (base^exp) % mod
-long long modPow(long long base, long long exp,
-                 long long mod) {
-    long long result = 1;
-    base = base % mod;
+def generate_key(private, public, prime):
+    return pow(public, private, prime)
 
-    while (exp > 0) {
-        if (exp % 2 == 1)
-            result = (result * base) % mod;
 
-        base = (base * base) % mod;
-        exp = exp / 2;
-    }
+# Public values shared by everyone
+p = 23
+g = 5
 
-    return result;
-}
+# Private keys of Alice and Bob
+a = 6
+b = 15
 
-int main() {
-    long long p = 23;
-    long long g = 5;
+# Eve's private keys for the two intercepted connections
+e1 = 7
+e2 = 9
 
-    // Alice and Bob's private keys
-    long long a = 6;
-    long long b = 15;
+# Alice and Bob generate public keys
+A = pow(g, a, p)
+B = pow(g, b, p)
 
-    // Eve's private keys for two separate exchanges
-    long long eA = 7;
-    long long eB = 10;
+print("Prime (p):", p)
+print("Generator (g):", g)
 
-    cout << "DIFFIE-HELLMAN KEY EXCHANGE\n";
-    cout << "Prime p = " << p << ", Generator g = "
-         << g << "\n\n";
+print("\n--- Normal Diffie-Hellman ---")
+print("Alice sends:", A)
+print("Bob sends:", B)
 
-    long long A = modPow(g, a, p);
-    long long B = modPow(g, b, p);
+alice_key = generate_key(a, B, p)
+bob_key = generate_key(b, A, p)
 
-    cout << "Alice public value: " << A << endl;
-    cout << "Bob public value: " << B << endl;
+print("Alice's shared key:", alice_key)
+print("Bob's shared key:", bob_key)
+print("Keys match:", alice_key == bob_key)
 
-    long long aliceKey = modPow(B, a, p);
-    long long bobKey = modPow(A, b, p);
+print("\n--- MITM Attack by Eve ---")
 
-    cout << "Alice shared secret: " << aliceKey << endl;
-    cout << "Bob shared secret: " << bobKey << endl;
+# Eve intercepts Alice's public key and sends her own to Bob
+E1 = pow(g, e1, p)
 
-    if (aliceKey == bobKey)
-        cout << "Normal DH: Shared secrets match.\n";
+# Eve intercepts Bob's public key and sends her own to Alice
+E2 = pow(g, e2, p)
 
-    cout << "\nMITM ATTACK\n";
+print("Eve sends to Alice:", E2)
+print("Eve sends to Bob:", E1)
 
-    // Eve creates two public values
-    long long EveToBob = modPow(g, eA, p);
-    long long EveToAlice = modPow(g, eB, p);
+# Alice and Bob unknowingly establish keys with Eve
+alice_eve_key = pow(E2, a, p)
+bob_eve_key = pow(E1, b, p)
 
-    cout << "Eve sends to Bob: " << EveToBob << endl;
-    cout << "Eve sends to Alice: " << EveToAlice << endl;
+# Eve computes the corresponding keys
+eve_alice_key = pow(A, e2, p)
+eve_bob_key = pow(B, e1, p)
 
-    // Alice unknowingly establishes a key with Eve
-    long long aliceEveKey = modPow(EveToAlice, a, p);
+print("Alice's key with Eve:", alice_eve_key)
+print("Eve's key with Alice:", eve_alice_key)
+print("Bob's key with Eve:", bob_eve_key)
+print("Eve's key with Bob:", eve_bob_key)
 
-    // Bob unknowingly establishes a key with Eve
-    long long bobEveKey = modPow(EveToBob, b, p);
+print("Alice-Eve keys match:",
+      alice_eve_key == eve_alice_key)
+print("Bob-Eve keys match:",
+      bob_eve_key == eve_bob_key)
 
-    // Eve computes both keys independently
-    long long eveAliceKey = modPow(A, eB, p);
-    long long eveBobKey = modPow(B, eA, p);
-
-    cout << "\nAlice-Eve key: " << aliceEveKey << endl;
-    cout << "Eve's Alice-side key: " << eveAliceKey << endl;
-
-    cout << "Bob-Eve key: " << bobEveKey << endl;
-    cout << "Eve's Bob-side key: " << eveBobKey << endl;
-
-    if (aliceEveKey == eveAliceKey &&
-        bobEveKey == eveBobKey) {
-        cout << "\nMITM successful: Eve knows both keys.\n";
-    }
-
-    cout << "\nWARNING: Small values are for education only.\n";
-
-    return 0;
-}
+print("\nEve can establish separate keys with both parties.")
+print("Without authentication, Alice and Bob cannot detect Eve.")
