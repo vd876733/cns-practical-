@@ -1,20 +1,45 @@
 
 import hashlib
+import os
 
-text = input("Enter a text: ")
+# Function to calculate SHA-1 hash of a file
+def calculate_sha1(filename):
+    sha1 = hashlib.sha1()
 
-# Calculate SHA-1 digest
-digest1 = hashlib.sha1(text.encode()).hexdigest()
-print("SHA-1 Digest:", digest1)
+    with open(filename, "rb") as file:
+        while True:
+            data = file.read(4096)
 
-# Change one character to demonstrate the effect
-changed_text = input("Enter a modified text (change one character): ")
+            if not data:
+                break
 
-digest2 = hashlib.sha1(changed_text.encode()).hexdigest()
-print("Modified Text:", changed_text)
-print("Modified Digest:", digest2)
+            sha1.update(data)
 
-if digest1 == digest2:
-    print("Digests match")
+    return sha1.hexdigest()
+
+
+# Create a sample file
+filename = "sample.txt"
+
+with open(filename, "w") as file:
+    file.write("Hello World")
+
+# Calculate original file digest
+original_hash = calculate_sha1(filename)
+
+print("Original SHA-1 Digest:", original_hash)
+
+# Modify the file
+with open(filename, "w") as file:
+    file.write("Hello Python")
+
+# Calculate modified file digest
+modified_hash = calculate_sha1(filename)
+
+print("\nModified SHA-1 Digest:", modified_hash)
+
+# Compare both hashes
+if original_hash == modified_hash:
+    print("\nFile is unchanged.")
 else:
-    print("Digests differ - input has changed")
+    print("\nFile has been modified!")
